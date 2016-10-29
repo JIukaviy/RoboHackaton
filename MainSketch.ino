@@ -19,7 +19,8 @@ enum ColorEnum {
     Red,
     Green,
     Blue,
-    Yellow
+    Yellow,
+    Orange
 };
 
 class IRSensorClass {
@@ -130,26 +131,31 @@ public:
     const int MinAnalogValue = 0;
     const int MaxAnalogValue = 255;
 
-    MotorClass(int enabePin, int input1Pin, int input2Pin) {
-        EnablePin = enabePin;
+    MotorClass(int enablePin, int input1Pin, int input2Pin) {
+        EnablePin = enablePin;
         Input1Pin = input1Pin;
-        input2Pin = input2Pin;
+        Input2Pin = input2Pin;
+
+        pinMode(EnablePin, OUTPUT);
+        pinMode(Input1Pin, OUTPUT);
+        pinMode(Input2Pin, OUTPUT);
     }    
 
     void SetSpeed(float speed) {
         int value = MinAnalogValue + abs(speed) * (MaxAnalogValue - MinAnalogValue);
-        analogWrite(EnablePin, value);
+        //analogWrite(EnablePin, value);
+        digitalWrite(EnablePin, HIGH);
         SetDirection(signbit(speed));
     }
 
-    void SetDirection(int direction) {
-        digitalWrite(Input1Pin, direction);
-        digitalWrite(Input2Pin, !direction);
+    void SetDirection(int direction) {  
+        digitalWrite(Input1Pin, direction ? HIGH : LOW);
+        digitalWrite(Input2Pin, direction ? LOW : HIGH);
     }
 
     void DisableMotor() {
         digitalWrite(Input1Pin, LOW);
-        digitalWrite(Input2Pin, LOW);
+        digitalWrite(Input2Pin, LOW);  
     }
 };
 
@@ -198,8 +204,8 @@ class SimpleLineStrategyClass : public BaseStrategyClass {
 public:
     using BaseStrategyClass::BaseStrategyClass;
     void Loop() {
-        Movement->GetLeftMotor()->SetSpeed(SensorManager->GetLeftIRSensor()->GetState());
-        Movement->GetRightMotor()->SetSpeed(SensorManager->GetRightIRSensor()->GetState());
+        Movement->GetLeftMotor()->SetSpeed(SensorManager->GetLeftIRSensor()->GetState() ? 1 : -1);
+        Movement->GetRightMotor()->SetSpeed(SensorManager->GetRightIRSensor()->GetState() ? 1 : -1);
     }
 };
 
@@ -209,6 +215,22 @@ public:
     void Loop() {
         SensorManager->GetColorSensor()->GetState();
         delay(500);
+    }
+};
+
+class DebugMotorsClass : public BaseStrategyClass {
+public:
+    using BaseStrategyClass::BaseStrategyClass;
+    void Loop() {
+        Movement->GetLeftMotor()->SetSpeed(1);
+        Movement->GetRightMotor()->SetSpeed(1);
+        delay(2000);
+        Movement->GetLeftMotor()->DisableMotor();
+        Movement->GetRightMotor()->DisableMotor();
+        delay(2000);
+        Movement->GetLeftMotor()->SetSpeed(-1);
+        Movement->GetRightMotor()->SetSpeed(-1);
+        delay(2000);
     }
 };
 
@@ -227,9 +249,7 @@ void setup() {
                                     new IRSensorClass(RIGHT_IR_PIN),
                                     new ColorSensorClass(COLOR_INPUT_PIN, COLOR_S2_PIN, COLOR_S3_PIN));
 
-    MainStrategy = new DebugColorSensorClass(MainSensorManager, MainMovement);
-
-    Serial.begin(9600);
+    MainStrategy = new SimpleLineStrategyClass(MainSensorManager, MainMovement);
 }
 
 void loop() {
