@@ -1,3 +1,6 @@
+#include <NewPing.h>
+#include <Servo.h>
+
 const int LEFT_MOTOR_ENABLE_PIN = 3;
 const int LEFT_MOTOR_INPUT1_PIN = 1;
 const int LEFT_MOTOR_INPUT2_PIN = 2;
@@ -9,11 +12,14 @@ const int RIGHT_MOTOR_INPUT2_PIN = 0;
 const int RIGHT_IR_PIN = 6;
 const int LEFT_IR_PIN = 7;
 
-const int COLOR_S2_PIN = 9;
+const int COLOR_S2_PIN = 11;
 const int COLOR_S3_PIN = 8;
-const int COLOR_INPUT_PIN = 11;
+const int COLOR_INPUT_PIN = 13;
 
-const int ULTRASONIC_TRIGGER_PIN = 10;
+const int SONAR_TRIGGER_PIN = 10;
+const int SONAR_ECHO_PIN = 12;
+
+const int SERVO_PIN = 9;
 
 enum ColorEnum {
     Red,
@@ -97,16 +103,31 @@ public:
     }
 };
 
+class DistanceSensorClass {
+private:
+    NewPing* sonar;
+public:
+    DistanceSensorClass(int trigPin, int echoPin, int maxDistance) {
+        sonar = new NewPing(trigPin, echoPin, maxDistance);
+    }
+
+    int GetDistance() {
+        return sonar->convert_cm(sonar->ping_median(5));
+    }
+};
+
 class SensorManagerClass {
 private:
     IRSensorClass* LeftIRSensor;
     IRSensorClass* RightIRSensor;
     ColorSensorClass* ColorSensor;
+    DistanceSensorClass* DistanceSensor;
 public:
-    SensorManagerClass(IRSensorClass* leftIRSensor, IRSensorClass* rightIRSensor, ColorSensorClass* colorSensor) {
+    SensorManagerClass(IRSensorClass* leftIRSensor, IRSensorClass* rightIRSensor, ColorSensorClass* colorSensor, DistanceSensorClass* distanceSensor) {
         LeftIRSensor = leftIRSensor;
         RightIRSensor = rightIRSensor;
         ColorSensor = colorSensor;
+        DistanceSensor = distanceSensor;
     }
 
     IRSensorClass* GetLeftIRSensor() {
@@ -119,6 +140,10 @@ public:
 
     ColorSensorClass* GetColorSensor() {
         return ColorSensor;
+    }
+
+    DistanceSensorClass* GetDistanceSensor() {
+        return DistanceSensor;
     }
 };
 
@@ -159,14 +184,37 @@ public:
     }
 };
 
+class ChassisClass {
+private:
+    Servo servo;
+public:
+    ChassisClass(int pin) {
+        servo.attach(pin);
+    }
+
+    void SetAngle(int angle) {
+        servo.write(angle);
+    }
+
+    void Drop() {
+        SetAngle(100);
+    }
+
+    void Lift() {
+        SetAngle(10);
+    }
+};
+
 class MovementClass {
 private:
     MotorClass* LeftMotor;
     MotorClass* RightMotor;
+    ChassisClass* Chassis;
 public:
-    MovementClass(MotorClass* leftMotor, MotorClass* rightMotor) {
+    MovementClass(MotorClass* leftMotor, MotorClass* rightMotor, ChassisClass* chassisClass) {
         LeftMotor = leftMotor;
         RightMotor = rightMotor;
+        Chassis = chassisClass;
     }
 
     void SetSpeedAndGoForward(float speed) {
@@ -176,6 +224,10 @@ public:
 
     void SetRotateRadiusAndSpeed(float radius, float speed) {
         // TODO: Написать код который бы распределял скорость вращения между моторами, дифференциал типо.
+    }
+
+    ChassisClass* GetChassis() {
+        return Chassis;
     }
 
     MotorClass* GetLeftMotor() {
@@ -234,6 +286,25 @@ public:
     }
 };
 
+class DebugSonarClass : public BaseStrategyClass {
+    using BaseStrategyClass::BaseStrategyClass;
+    void Loop() {
+        Serial.print( SensorManager->GetDistanceSensor()->GetDistance() );
+        Serial.println( "cm" );
+        delay(300);
+    }
+};
+
+class DebugChassisClass : public BaseStrategyClass {
+    using BaseStrategyClass::BaseStrategyClass;
+    void Loop() {
+        Movement->GetChassis()->Drop();
+        delay(5000);
+        Movement->GetChassis()->Lift();
+        delay(5000);
+    }
+};
+
 MovementClass* MainMovement;
 
 SensorManagerClass* MainSensorManager;
@@ -242,12 +313,14 @@ BaseStrategyClass* MainStrategy;
 
 void setup() {
     MainMovement =      new MovementClass(new MotorClass(LEFT_MOTOR_ENABLE_PIN,  LEFT_MOTOR_INPUT1_PIN,  LEFT_MOTOR_INPUT2_PIN),
-                                     new MotorClass(RIGHT_MOTOR_ENABLE_PIN, RIGHT_MOTOR_INPUT1_PIN, RIGHT_MOTOR_INPUT2_PIN));
+                                          new MotorClass(RIGHT_MOTOR_ENABLE_PIN, RIGHT_MOTOR_INPUT1_PIN, RIGHT_MOTOR_INPUT2_PIN),
+                                          new ChassisClass(SERVO_PIN));
                             
     MainSensorManager = new SensorManagerClass(
                                     new IRSensorClass(LEFT_IR_PIN), 
                                     new IRSensorClass(RIGHT_IR_PIN),
-                                    new ColorSensorClass(COLOR_INPUT_PIN, COLOR_S2_PIN, COLOR_S3_PIN));
+                                    new ColorSensorClass(COLOR_INPUT_PIN, COLOR_S2_PIN, COLOR_S3_PIN),
+                                    new DistanceSensorClass(SONAR_TRIGGER_PIN, SONAR_ECHO_PIN, 300));
 
     MainStrategy = new SimpleLineStrategyClass(MainSensorManager, MainMovement);
 }
