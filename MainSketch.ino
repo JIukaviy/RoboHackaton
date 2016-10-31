@@ -22,12 +22,24 @@ const int SONAR_ECHO_PIN = 12;
 const int SERVO_PIN = 9;
 
 enum ColorEnum {
+    White,
     Red,
     Green,
     Blue,
     Yellow,
     Orange
 };
+
+char const * getColorName(ColorEnum color) {
+    switch (color) {
+        case White: return "White";
+        case Red: return "Red";
+        case Green: return "Green";
+        case Blue: return "Blue";
+        case Yellow: return "Yellow";
+        case Orange: return "Orange";
+    }
+}
 
 class IRSensorClass {
 private:
@@ -49,12 +61,18 @@ private:
     int S2_PIN;
     int S3_PIN;
 
-    int GetState(int s2PinState, int s3PinState) {
+    unsigned long GetState(int s2PinState, int s3PinState) {
         digitalWrite(S2_PIN, s2PinState);
         digitalWrite(S3_PIN, s3PinState);
         return pulseIn(SENSOR_IN_PIN, LOW);   
     }
 
+    float dist(const float a[3], const float b[3]) {
+        float res = 0;
+        for (int i = 0; i < 3; i++)
+            res += fabs(a[i] - b[i]);
+        return res;
+    }
 public:
     ColorSensorClass(int sensorPin, int s2Pin, int s3Pin) {
         SENSOR_IN_PIN = sensorPin;
@@ -66,40 +84,60 @@ public:
     }
 
     ColorEnum GetState() {
-        int red;
-        int blue;
-        int green;
-
-        red = GetState(LOW, LOW);
-        blue = GetState(LOW, HIGH);
-        green = GetState(HIGH, HIGH);
-
-        float t_yellow = abs(red*1.0f/green);
-
-        ColorEnum res;
-
-        if (blue < green && blue < red) {
-            res = Blue;
-            Serial.println("Color is Blue");
-        } else if (t_yellow + 0.1 > 0.8 && t_yellow - 0.1f < 0.8) {
-            res = Yellow;
-            Serial.println("Color is Yellow");            
-        } else if (red < green) {
-            res = Red;
-            Serial.println("Color is Red");
-        } else {
-            res = Green;
-            Serial.println("Color is Green");
-        }
-
+        unsigned long redRaw, greenRaw, blueRaw, minValue, maxValue;
+        redRaw = GetState(LOW, LOW);
+        greenRaw = GetState(HIGH, HIGH);
+        blueRaw = GetState(LOW, HIGH);
+        maxValue = max(redRaw, max(greenRaw, blueRaw)) + 100;
+        
+        float minDist = 100, norm[3] = {redRaw / (float)maxValue, greenRaw / (float)maxValue, blueRaw / (float)maxValue};
         Serial.print("Red: ");
-        Serial.print(red);
+        Serial.print(norm[0]);
         Serial.print(" Green: ");
-        Serial.print(green);
+        Serial.print(norm[1]);
         Serial.print(" Blue: ");
-        Serial.print(blue);
-        Serial.print(" Yellow: ");
-        Serial.println(t_yellow);
+        Serial.println(norm[2]);
+        
+        ColorEnum res;
+        
+        float red[] = {0, 1, 1};
+        if (dist(norm, red) < minDist) {
+            minDist = dist(norm, red);
+            res = Red;
+        }
+        
+        float green[] = {1, 0, 1};
+        if (dist(norm, green) < minDist) {
+            minDist = dist(norm, green);
+            res = Green;
+        }
+        
+        float blue[] = {1, 1, 0};
+        if (dist(norm, blue) < minDist) {
+            minDist = dist(norm, blue);
+            res = Blue;
+        }
+        
+        float yellow[] = {0, 0, 1}; // #ffff00
+        if (dist(norm, yellow) < minDist) {
+            minDist = dist(norm, yellow);
+            res = Yellow;
+        }
+        
+        float orange[] = {0, 1 - 0xa5 / 255.0, 1}; // #ffa500
+        if (dist(norm, orange) < minDist) {
+            minDist = dist(norm, orange);
+            res = Orange;
+        }
+        
+        float white[] = {0, 0, 0};
+        if (dist(norm, white) < minDist) {
+            minDist = dist(norm, white);
+            res = White;
+        }
+        
+        Serial.print("Color is ");
+        Serial.println(getColorName(res));
     }
 };
 
